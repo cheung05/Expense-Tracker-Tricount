@@ -162,6 +162,22 @@
          <button id="welcome-login-btn" class="btn btn-action btn-lg btn-block" style="display: none;">連結 Google 帳號</button>
       </div>
     </div>
+    
+    <!-- Custom Confirm Modal -->
+    <div id="confirm-modal" class="modal-overlay" style="display: none;">
+      <div class="modal-card card">
+         <div class="modal-icon-wrapper">
+            <span class="material-symbols-outlined modal-warning-icon">delete_forever</span>
+         </div>
+         <h2 style="font-size: 1.25rem; margin-bottom: 0.5rem; color: var(--text-dark)">確認刪除紀錄？</h2>
+         <p style="margin-bottom: 1.5rem; color: var(--text-muted); font-size: 0.9rem;">刪除後資料將無法復原，您確定要繼續嗎？</p>
+         
+         <div class="modal-actions">
+            <button id="cancel-delete-btn" class="btn btn-secondary">取消</button>
+            <button id="confirm-delete-btn" class="btn btn-danger">確定刪除</button>
+         </div>
+      </div>
+    </div>
   </div>
   
   <script src="app.js"></script>
