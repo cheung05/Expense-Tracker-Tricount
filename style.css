@@ -153,6 +153,9 @@ body {
 .icon-btn-small:hover {
   background: #EFF6FF;
 }
+.delete-btn.icon-btn-small:hover {
+  background: #FEF2F2 !important;
+}
 
 /* Setting half-doughnut properly */
 .chart-container {
@@ -458,4 +461,74 @@ select:focus, textarea:focus {
 .app-logo { margin-bottom: 1rem; }
 .btn-secondary {
   background: var(--border); color: var(--text-dark); padding: 0.5rem 1rem; font-size: 0.875rem; border-radius: var(--radius-sm);
+}
+
+/* Custom Modal Overlay */
+.modal-overlay {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background-color: rgba(15, 23, 42, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  backdrop-filter: blur(4px);
+  animation: fadeIn 0.2s ease-out;
+}
+
+.modal-card {
+  padding: 2.5rem 2rem;
+  width: 90%;
+  max-width: 400px;
+  text-align: center;
+  animation: slideUp 0.3s ease-out;
+}
+
+.modal-icon-wrapper {
+  width: 64px;
+  height: 64px;
+  background: #FEE2E2;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 1.25rem;
+}
+
+.modal-warning-icon {
+  font-size: 32px;
+  color: #EF4444;
+}
+
+.modal-actions {
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+}
+
+.modal-actions .btn {
+  flex: 1;
+  padding: 0.75rem 1rem;
+}
+
+.btn-danger {
+  background-color: #EF4444;
+  color: white;
+  box-shadow: 0 4px 10px rgba(239, 68, 68, 0.3);
+}
+
+.btn-danger:hover:not(:disabled) {
+  background-color: #DC2626;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 15px rgba(239, 68, 68, 0.4);
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
 }
