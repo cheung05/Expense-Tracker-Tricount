@@ -265,8 +265,13 @@ function renderTable(rows) {
                 <div class="timeline-title">${category} <span style="font-size: 0.75em; font-weight: 400; color:#64748B">(${payment})</span></div>
                 <div class="timeline-date">${date} ${description ? ('· ' + description) : ''}</div>
             </div>
-            <div class="timeline-amount ${amoutCls}">${amoutPrefix} ${Number(amount).toLocaleString()} $</div>
+            <div class="timeline-amount ${amoutCls}" style="margin-right: 0.5rem;">${amoutPrefix} ${Number(amount).toLocaleString()} $</div>
+            <button class="delete-btn icon-btn-small" style="color: #ef4444;" title="刪除">
+                <span class="material-symbols-outlined" style="font-size: 20px; pointer-events: none;">delete</span>
+            </button>
         `;
+        
+        item.querySelector('.delete-btn').addEventListener('click', () => deleteRecord(id));
         container.appendChild(item);
     });
 }
@@ -412,6 +417,84 @@ form.addEventListener('submit', async (e) => {
         btn.disabled = false;
         btn.innerText = '新增';
         setTimeout(() => msg.innerText = '', 3000);
+    }
+});
+
+let currentDeleteId = null;
+
+function deleteRecord(id) {
+    currentDeleteId = id;
+    document.getElementById('confirm-modal').style.display = 'flex';
+}
+
+function closeDeleteModal() {
+    document.getElementById('confirm-modal').style.display = 'none';
+    currentDeleteId = null;
+}
+
+document.getElementById('cancel-delete-btn').addEventListener('click', closeDeleteModal);
+
+document.getElementById('confirm-delete-btn').addEventListener('click', async () => {
+    if (!currentDeleteId) return;
+    
+    const btn = document.getElementById('confirm-delete-btn');
+    const originalText = btn.innerText;
+    btn.disabled = true;
+    btn.innerText = '刪除中...';
+
+    try {
+        const spreadsheetId = SPREADSHEET_ID;
+        
+        // 取得 sheetId
+        const resSheet = await gapi.client.sheets.spreadsheets.get({
+            spreadsheetId: spreadsheetId,
+        });
+        const sheet = resSheet.result.sheets.find(s => s.properties.title === '記帳紀錄');
+        if (!sheet) throw new Error('找不到「記帳紀錄」工作表');
+        const sheetId = sheet.properties.sheetId;
+
+        // 尋找對應的列數
+        const resValues = await gapi.client.sheets.spreadsheets.values.get({
+            spreadsheetId: spreadsheetId,
+            range: '記帳紀錄!A:A',
+        });
+        const rows = resValues.result.values || [];
+        const rowIndex = rows.findIndex(row => row[0] === currentDeleteId);
+        
+        if (rowIndex === -1) {
+            alert('找不到該筆紀錄，可能已被刪除');
+            closeDeleteModal();
+            return;
+        }
+
+        // 執行刪除
+        await gapi.client.sheets.spreadsheets.batchUpdate({
+            spreadsheetId: spreadsheetId,
+            resource: {
+                requests: [
+                    {
+                        deleteDimension: {
+                            range: {
+                                sheetId: sheetId,
+                                dimension: 'ROWS',
+                                startIndex: rowIndex,
+                                endIndex: rowIndex + 1
+                            }
+                        }
+                    }
+                ]
+            }
+        });
+        
+        // 重新讀取資料
+        await fetchRecordsData();
+        closeDeleteModal();
+    } catch(err) {
+        console.error('刪除失敗', err);
+        alert('刪除失敗！請檢查連線與授權狀態');
+    } finally {
+        btn.disabled = false;
+        btn.innerText = originalText;
     }
 });
 
