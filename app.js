@@ -364,6 +364,23 @@ async function updateTripMembers(tripId, newMembers) {
   });
 }
 
+async function updateTripName(tripId, newName) {
+  const res = await gapi.client.sheets.spreadsheets.values.get({
+    spreadsheetId: SPREADSHEET_ID,
+    range: '旅行!A:A',
+  });
+  const rows = res.result.values || [];
+  const rowIndex = rows.findIndex(r => r[0] === tripId);
+  if (rowIndex === -1) return;
+
+  await gapi.client.sheets.spreadsheets.values.update({
+    spreadsheetId: SPREADSHEET_ID,
+    range: `旅行!B${rowIndex + 1}`,
+    valueInputOption: 'RAW',
+    resource: { values: [[newName]] }
+  });
+}
+
 function safeJsonParse(str, fallback) {
   try { return JSON.parse(str); }
   catch { return fallback; }
@@ -987,14 +1004,169 @@ async function handleDeleteExpense(expId) {
 function renderSettingsModal() {
   if (!currentTrip) return;
 
+  const tripNameInput = $('edit-trip-name');
+  if (tripNameInput) tripNameInput.value = currentTrip.name;
+
   const memberList = $('settings-member-list');
   memberList.innerHTML = currentTrip.members.map(m => `
     <div class="settings-member-tag">
       ${avatarHTML(m, 'avatar-xs')}
       ${m}
+      <button type="button" class="member-edit-btn" title="重新命名成員" onclick="handleRenameMember('${m}')">
+        <span class="material-symbols-outlined">edit</span>
+      </button>
+      <button type="button" class="member-delete-btn" title="刪除成員" onclick="handleDeleteMember('${m}')">
+        <span class="material-symbols-outlined">close</span>
+      </button>
     </div>
   `).join('');
 }
+
+// Delete Member
+function handleDeleteMember(memberName) {
+  if (!currentTrip) return;
+  if (currentTrip.members.length <= 2) {
+    alert('旅行至少需要 2 位成員，無法再刪除');
+    return;
+  }
+  
+  const hasExpenses = expenses.some(exp => exp.paidBy === memberName || exp.splitMembers.includes(memberName));
+  if (hasExpenses) {
+    alert('此成員已有相關費用紀錄，無法刪除');
+    return;
+  }
+
+  showConfirm(
+    '確認刪除成員？',
+    `確定要從此旅行中刪除成員「${memberName}」嗎？`,
+    async () => {
+      const originalMembers = [...currentTrip.members];
+      try {
+        currentTrip.members = currentTrip.members.filter(m => m !== memberName);
+        await updateTripMembers(currentTrip.id, currentTrip.members);
+        renderSettingsModal();
+        renderAll();
+      } catch (err) {
+        console.error('刪除成員失敗', err);
+        currentTrip.members = originalMembers;
+        alert('刪除失敗，請重試');
+      }
+    }
+  );
+}
+
+// Rename Member
+function handleRenameMember(oldName) {
+  if (!currentTrip) return;
+  const newName = prompt(`為成員「${oldName}」輸入新的名稱:`, oldName);
+  if (!newName || newName.trim() === '' || newName.trim() === oldName) return;
+  
+  const trimmedName = newName.trim();
+  if (currentTrip.members.includes(trimmedName)) {
+    alert('此名稱已被其他成員使用');
+    return;
+  }
+
+  const memberIndex = currentTrip.members.indexOf(oldName);
+  if (memberIndex === -1) return;
+
+  const affectedExpenses = expenses.filter(exp => exp.paidBy === oldName || exp.splitMembers.includes(oldName));
+
+  showConfirm(
+    '確認重新命名？',
+    `將「${oldName}」重新命名為「${trimmedName}」？這將一併更新 ${affectedExpenses.length} 筆相關的費用紀錄。`,
+    async () => {
+      try {
+        currentTrip.members[memberIndex] = trimmedName;
+        
+        affectedExpenses.forEach(exp => {
+          if (exp.paidBy === oldName) exp.paidBy = trimmedName;
+          const sIdx = exp.splitMembers.indexOf(oldName);
+          if (sIdx !== -1) exp.splitMembers[sIdx] = trimmedName;
+        });
+
+        await updateTripMembers(currentTrip.id, currentTrip.members);
+
+        if (affectedExpenses.length > 0) {
+          const resValues = await gapi.client.sheets.spreadsheets.values.get({
+            spreadsheetId: SPREADSHEET_ID,
+            range: '費用!A:A',
+          });
+          const expenseSheetRows = resValues.result.values || [];
+          
+          const updateRequests = [];
+          for (const exp of affectedExpenses) {
+            const rowIndex = expenseSheetRows.findIndex(r => r[0] === exp.id);
+            if (rowIndex !== -1) {
+               updateRequests.push({
+                 range: `費用!E${rowIndex + 1}:I${rowIndex+1}`,
+                 values: [[
+                   exp.paidBy,
+                   exp.category,
+                   exp.date,
+                   exp.description,
+                   JSON.stringify(exp.splitMembers)
+                 ]]
+               });
+            }
+          }
+
+          if (updateRequests.length > 0) {
+            await gapi.client.sheets.spreadsheets.values.batchUpdate({
+              spreadsheetId: SPREADSHEET_ID,
+              resource: {
+                valueInputOption: 'RAW',
+                data: updateRequests
+              }
+            });
+          }
+        }
+        
+        renderSettingsModal();
+        renderAll();
+      } catch (err) {
+        console.error('重新命名失敗', err);
+        alert('重新命名失敗，請重試');
+        selectTrip(currentTrip.id);
+      }
+    }
+  );
+}
+
+// Rename Trip
+$('edit-trip-btn').addEventListener('click', async () => {
+  const input = $('edit-trip-name');
+  const newName = input.value.trim();
+  if (!newName) return;
+  if (newName === currentTrip.name) {
+    alert('名稱未變更');
+    return;
+  }
+
+  const btn = $('edit-trip-btn');
+  btn.disabled = true;
+  btn.textContent = '...';
+
+  const oldTripName = currentTrip.name;
+  try {
+    currentTrip.name = newName;
+    await updateTripName(currentTrip.id, newName);
+    
+    const tripToUpdate = trips.find(t => t.id === currentTrip.id);
+    if (tripToUpdate) tripToUpdate.name = newName;
+
+    $('current-trip-name').textContent = newName;
+    alert('旅行名稱已更新');
+  } catch (err) {
+    console.error('更新旅行名稱失敗', err);
+    currentTrip.name = oldTripName;
+    input.value = oldTripName;
+    alert('更新失敗，請重試');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '儲存';
+  }
+});
 
 // Add Member
 $('add-member-btn').addEventListener('click', async () => {
